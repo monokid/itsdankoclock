@@ -5,23 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Cosmic Hourly Timer</title>
   <style>
-    :root {
-      --bg-start: hsl(30, 70%, 88%); /* Dawn light */
-      --bg-end: hsl(260, 60%, 6%);   /* Deep space dark */
-    }
+    :root { --font-main: 'Inter', system-ui, -apple-system, sans-serif; }
     * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
-    body, html { width: 100%; height: 100vh; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; }
+    body, html { width: 100%; height: 100vh; overflow: hidden; background: #000; font-family: var(--font-main); }
     
-    /* Background Canvas */
-    #nebula-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-    
-    /* Dynamic Theme Overlay */
-    #theme-layer {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2;
-      transition: background 3s ease-in-out;
+    #space-canvas {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
     }
-
-    /* Center Timer */
+    
     #timer {
       position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
@@ -29,73 +20,87 @@
       font-size: clamp(4rem, 22vw, 16rem);
       font-weight: 900;
       color: #fff;
-      text-shadow: 0 0 15px rgba(255,255,255,0.9), 0 0 30px rgba(100,150,255,0.6);
+      text-shadow: 0 0 15px rgba(255,255,255,0.8), 0 0 30px rgba(150,200,255,0.5);
       letter-spacing: -0.02em;
       user-select: none;
       pointer-events: none;
+      transition: text-shadow 0.3s ease, transform 0.3s ease;
+    }
+    #timer.running {
+      animation: pulse 2.5s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { text-shadow: 0 0 15px rgba(255,255,255,0.8), 0 0 30px rgba(150,200,255,0.5); }
+      50% { text-shadow: 0 0 25px rgba(255,255,255,1), 0 0 50px rgba(180,210,255,0.8), 0 0 80px rgba(220,235,255,0.6); }
     }
 
-    /* Start Button */
     #start-btn {
-      position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
+      position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
       z-index: 20;
       padding: 1rem 3rem; font-size: 1.4rem; font-weight: 700;
-      background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.6);
+      background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.5);
       color: white; border-radius: 99px; cursor: pointer;
-      backdrop-filter: blur(12px); transition: all 0.3s ease;
+      backdrop-filter: blur(10px); transition: all 0.3s ease;
     }
-    #start-btn:hover { background: rgba(255,255,255,0.25); transform: translateX(-50%) scale(1.03); }
+    #start-btn:hover { background: rgba(255,255,255,0.2); transform: translateX(-50%) scale(1.03); }
     #start-btn.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) scale(0.9); }
 
-    /* Hourly Message Overlay */
+    #live-indicator {
+      position: absolute; top: 20px; right: 20px;
+      z-index: 15; display: flex; align-items: center; gap: 8px;
+      color: rgba(255,255,255,0.8); font-size: 0.85rem; font-weight: 600;
+      opacity: 0; transition: opacity 0.4s ease; pointer-events: none;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    #live-indicator.visible { opacity: 1; }
+    #live-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #4ade80; box-shadow: 0 0 12px #4ade80;
+      animation: blink 1.5s infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.3; } }
+
     #message-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      z-index: 50;
-      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      z-index: 50; display: flex; align-items: center; justify-content: center; flex-direction: column;
       background: #ffffff; color: #111;
-      opacity: 0; pointer-events: none; transition: opacity 1.2s ease;
+      opacity: 0; pointer-events: none; transition: opacity 1s ease;
       text-align: center; padding: 2rem;
     }
     #message-overlay.visible { opacity: 1; pointer-events: auto; }
-    #message-text {
-      font-size: clamp(1.8rem, 6vw, 3.5rem); font-weight: 800; line-height: 1.4;
-      margin-bottom: 1rem;
-    }
-    #message-sub {
-      font-size: clamp(1rem, 3vw, 1.5rem); opacity: 0.7; font-weight: 500;
-    }
+    #message-text { font-size: clamp(1.8rem, 6vw, 3.5rem); font-weight: 800; line-height: 1.35; margin-bottom: 1rem; }
+    #message-sub { font-size: clamp(1rem, 3vw, 1.5rem); opacity: 0.75; font-weight: 500; }
 
-    /* Hidden Controls */
     #ctrl-toggle {
       position: fixed; top: 12px; left: 12px; z-index: 60;
       width: 44px; height: 44px; border-radius: 50%;
-      background: rgba(255,255,255,0.15); border: none;
-      color: rgba(255,255,255,0.5); font-size: 1.2rem; cursor: pointer;
+      background: rgba(255,255,255,0.12); border: none;
+      color: rgba(255,255,255,0.6); font-size: 1.3rem; cursor: pointer;
       backdrop-filter: blur(6px); transition: all 0.3s;
     }
     #ctrl-panel {
       position: fixed; top: 65px; left: 12px; z-index: 55;
-      background: rgba(0,0,0,0.75); padding: 16px; border-radius: 12px;
-      display: flex; flex-direction: column; gap: 10px;
+      background: rgba(0,0,0,0.7); padding: 14px; border-radius: 12px;
+      display: flex; flex-direction: column; gap: 8px;
       backdrop-filter: blur(10px); opacity: 0; pointer-events: none;
-      transform: translateY(-10px); transition: all 0.3s ease;
+      transform: translateY(-10px); transition: all 0.25s ease;
     }
     #ctrl-panel.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
     #ctrl-panel button {
-      padding: 12px 16px; background: #333; border: 1px solid #555;
-      color: white; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: 500;
-      transition: background 0.2s;
+      padding: 10px 14px; background: #2a2a35; border: 1px solid #444;
+      color: white; border-radius: 8px; cursor: pointer; font-size: 0.95rem; font-weight: 500;
+      transition: background 0.15s;
     }
-    #ctrl-panel button:hover { background: #555; }
-    #ctrl-panel button:active { transform: scale(0.96); }
+    #ctrl-panel button:hover { background: #3a3a45; }
+    #ctrl-panel button:active { transform: scale(0.97); }
   </style>
 </head>
 <body>
 
-  <canvas id="nebula-canvas"></canvas>
-  <div id="theme-layer"></div>
+  <canvas id="space-canvas"></canvas>
   <div id="timer">00:00</div>
-  <button id="start-btn">START</button>
+  <div id="live-indicator"><div id="live-dot"></div> ACTIVE</div>
+  <button id="start-btn">▶ START</button>
 
   <div id="message-overlay">
     <div id="message-text"></div>
@@ -104,8 +109,8 @@
 
   <button id="ctrl-toggle" aria-label="Settings">⚙️</button>
   <div id="ctrl-panel">
-    <button id="btn-start-pause">Start / Pause</button>
-    <button id="btn-reset">Reset (00:00)</button>
+    <button id="btn-start-pause">⏯ Start / Pause</button>
+    <button id="btn-reset">↺ Reset (00:00)</button>
     <div style="display:flex; gap:8px;">
       <button id="btn-minus" style="flex:1;">− 1h</button>
       <button id="btn-plus" style="flex:1;">+ 1h</button>
@@ -113,75 +118,143 @@
   </div>
 
 <script>
-  // --- Canvas Setup ---
-  const canvas = document.getElementById('nebula-canvas');
+  // --- Canvas & State Setup ---
+  const canvas = document.getElementById('space-canvas');
   const ctx = canvas.getContext('2d');
-  let w, h, cx, cy;
-  const STAR_COUNT = 750;
+  let w, h, cx, cy, dpr;
+  const STAR_COUNT = 550;
+  const NEBULA_COUNT = 28;
   const stars = [];
+  const nebula = [];
+  
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = canvas.width = window.innerWidth * dpr;
+    h = canvas.height = window.innerHeight * dpr;
+    cx = w / 2; cy = h / 2;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+  }
+  window.addEventListener('resize', resize);
+  resize();
 
+  // 3D Stars
   class Star {
     constructor() { this.reset(true); }
     reset(init = false) {
-      this.x = (Math.random() - 0.5) * w * 2.5;
-      this.y = (Math.random() - 0.5) * h * 2.5;
-      this.z = init ? Math.random() * 1200 : 1200;
+      this.x = (Math.random() - 0.5) * w * 2.8;
+      this.y = (Math.random() - 0.5) * h * 2.8;
+      this.z = init ? Math.random() * 1500 : 1500;
       this.hue = Math.random() * 360;
-      this.size = Math.random() * 1.5 + 0.5;
-      this.speed = 1.5 + Math.random() * 2.5;
+      this.size = Math.random() * 2 + 0.8;
+      this.speed = 1.2 + Math.random() * 3;
+      this.prevZ = this.z;
     }
-    draw(hours) {
+    update() {
+      this.prevZ = this.z;
       this.z -= this.speed;
-      if (this.z <= 1) { this.reset(); return; }
-
-      const scale = 300 / this.z;
+      if (this.z <= 1) this.reset();
+    }
+    draw(hours, timeProgress) {
+      const scale = 400 / this.z;
+      const px = this.prevZ > this.z ? cx + this.x * (400 / this.prevZ) : cx + this.x * scale;
+      const py = this.prevZ > this.z ? cy + this.y * (400 / this.prevZ) : cy + this.y * scale;
       const sx = cx + this.x * scale;
       const sy = cy + this.y * scale;
-      const r = Math.max(0.5, this.size * scale * 1.2);
-      
-      if (sx < -20 || sx > w + 20 || sy < -20 || sy > h + 20) return;
+      const r = Math.max(0.5, this.size * scale * 1.1);
 
-      // Psychedelic hue shift over time + per-star variation
-      const hue = (this.hue + hours * 40) % 360;
-      const lightness = Math.min(80, 50 + (1 - this.z / 1200) * 50);
-      
-      // Whoosh trail
-      const prevScale = 300 / (this.z + this.speed * 15);
-      const px = cx + this.x * prevScale;
-      const py = cy + this.y * prevScale;
-
+      // Trail
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(px, py);
-      ctx.strokeStyle = `hsla(${hue}, 80%, ${lightness}%, 0.8)`;
-      ctx.lineWidth = r;
+      const trailHue = (this.hue + hours * 30 + timeProgress * 15) % 360;
+      ctx.strokeStyle = `hsla(${trailHue}, 85%, 75%, ${0.3 + (1 - this.z/1500)*0.5})`;
+      ctx.lineWidth = r * 0.8;
       ctx.lineCap = 'round';
       ctx.stroke();
 
       // Core
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${hue}, 90%, 90%, 1)`;
+      ctx.fillStyle = `hsla(${(trailHue + 30) % 360}, 90%, 92%, 0.95)`;
       ctx.fill();
     }
   }
 
-  function resize() {
-    w = canvas.width = window.innerWidth;
-    h = canvas.height = window.innerHeight;
-    cx = w / 2; cy = h / 2;
+  // Nebula Clouds
+  class Nebula {
+    constructor() { this.reset(true); }
+    reset(init = false) {
+      this.x = Math.random() * w;
+      this.y = Math.random() * h;
+      this.radius = (Math.random() * 0.4 + 0.3) * Math.min(w, h);
+      this.hue = Math.random() * 360;
+      this.speedX = (Math.random() - 0.5) * 0.3;
+      this.speedY = (Math.random() - 0.5) * 0.3;
+      this.phase = Math.random() * Math.PI * 2;
+      this.init = init;
+    }
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      if (this.x < -this.radius) this.x = w + this.radius;
+      if (this.x > w + this.radius) this.x = -this.radius;
+      if (this.y < -this.radius) this.y = h + this.radius;
+      if (this.y > h + this.radius) this.y = -this.radius;
+    }
+    draw(hours) {
+      const pulse = 0.85 + 0.15 * Math.sin(this.phase + hours * 0.5);
+      const hue = (this.hue + hours * 20) % 360;
+      const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * pulse);
+      grad.addColorStop(0, `hsla(${hue}, 75%, 60%, 0.12)`);
+      grad.addColorStop(0.5, `hsla(${(hue+40)%360}, 60%, 45%, 0.06)`);
+      grad.addColorStop(1, `hsla(${hue}, 50%, 20%, 0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  window.addEventListener('resize', resize);
-  resize();
-  for(let i=0; i<STAR_COUNT; i++) stars.push(new Star());
 
-  // --- State ---
+  for(let i=0; i<STAR_COUNT; i++) stars.push(new Star());
+  for(let i=0; i<NEBULA_COUNT; i++) nebula.push(new Nebula());
+
+  // --- App State ---
   let isRunning = false;
+  let isPaused = false;
   let startTime = 0;
-  let elapsed = 0; // ms
+  let elapsed = 0;
   let lastTriggeredHour = -1;
   let messageTimeout;
-  let isPaused = false;
+  let lastTime = performance.now();
+
+  // --- Timer Logic ---
+  function update(now) {
+    if (isRunning && !isPaused) elapsed = now - startTime;
+    renderTimer(elapsed);
+    checkHourTrigger();
+    drawCosmos(elapsed / 3600000);
+    requestAnimationFrame(update);
+  }
+
+  function renderTimer(ms) {
+    const totalSecs = Math.floor(Math.max(0, ms) / 1000);
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    const display = hrs === 0 
+      ? `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`
+      : `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}`;
+    document.getElementById('timer').textContent = display;
+  }
+
+  function checkHourTrigger() {
+    const currentHour = Math.floor(elapsed / 3600000);
+    if (currentHour > 0 && currentHour !== lastTriggeredHour) {
+      lastTriggeredHour = currentHour;
+      showMessage(currentHour);
+    }
+  }
 
   const messages = [
     "🌿 Time to hydrate! Drink water, stretch your limbs, and breathe deeply.",
@@ -194,125 +267,98 @@
     "💖 You matter. Drink some water, step outside if you can, breathe."
   ];
 
-  // --- Core Loop ---
-  function update() {
-    if (isRunning && !isPaused) {
-      const now = Date.now();
-      elapsed = now - startTime;
-    }
-    renderTimer();
-    checkHourTrigger();
-    updateTheme();
-    drawStars();
-    requestAnimationFrame(update);
-  }
-
-  function renderTimer() {
-    const totalMins = Math.max(0, Math.floor(elapsed / 60000));
-    const hh = String(Math.floor(totalMins / 60)).padStart(2, '0');
-    const mm = String(totalMins % 60).padStart(2, '0');
-    document.getElementById('timer').textContent = `${hh}:${mm}`;
-  }
-
-  function updateTheme() {
-    const hours = elapsed / 3600000;
-    const p = Math.min(1, hours / 8); // 0 to 1 over 8 hours
-    
-    // Interpolate HSL
-    const h = 30 + (230 * p);
-    const s = 65 + (15 * p);
-    const l = 92 - (86 * p);
-    const bgStart = `hsl(${h}, ${s}%, ${l}%)`;
-    const bgEnd = `hsl(${(h + 40) % 360}, ${s - 10}%, ${l - 20}%)`;
-    
-    document.getElementById('theme-layer').style.background = 
-      `radial-gradient(ellipse at center, ${bgStart} 0%, ${bgEnd} 100%)`;
-  }
-
-  function checkHourTrigger() {
-    const currentHour = Math.floor(elapsed / 3600000);
-    if (currentHour > 0 && currentHour !== lastTriggeredHour) {
-      lastTriggeredHour = currentHour;
-      showMessage(currentHour);
-    }
-  }
-
   function showMessage(hour) {
     const overlay = document.getElementById('message-overlay');
-    const textEl = document.getElementById('message-text');
-    textEl.textContent = messages[hour % messages.length];
+    document.getElementById('message-text').textContent = messages[hour % messages.length];
     overlay.classList.add('visible');
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
     if (messageTimeout) clearTimeout(messageTimeout);
-    messageTimeout = setTimeout(() => {
-      overlay.classList.remove('visible');
-    }, 3 * 60 * 1000); // 3 minutes
+    messageTimeout = setTimeout(() => overlay.classList.remove('visible'), 180000);
   }
 
-  function drawStars() {
+  // --- Cosmic Animation ---
+  function drawCosmos(hours) {
+    // Theme progression: 0h = Dawn pastel, 8h = Deep cosmic dark
+    const p = Math.min(1, hours / 8);
+    const bgHue = 30 + 220 * p;
+    const bgSat = 60 + 20 * p;
+    const bgLight = 90 - 80 * p;
+    
+    // Clear & Background
     ctx.clearRect(0, 0, w, h);
-    const hours = elapsed / 3600000;
-    for (let star of stars) star.draw(hours);
+    const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.8);
+    bgGrad.addColorStop(0, `hsl(${bgHue}, ${bgSat}%, ${bgLight}%)`);
+    bgGrad.addColorStop(1, `hsl(${(bgHue+40)%360}, ${bgSat-10}%, ${Math.max(2, bgLight-25)}%)`);
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Composite mode for psychedelic blend
+    ctx.globalCompositeOperation = 'screen';
+
+    // Nebula
+    for (const cloud of nebula) { cloud.update(); cloud.draw(hours); }
+
+    // Stars
+    for (const star of stars) { star.update(); star.draw(hours, p); }
+
+    // Reset composite
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   // --- Controls ---
-  const btnStart = document.getElementById('start-btn');
-  const btnPause = document.getElementById('btn-start-pause');
+  const timerEl = document.getElementById('timer');
+  const liveEl = document.getElementById('live-indicator');
+  const startBtn = document.getElementById('start-btn');
+  const pauseBtn = document.getElementById('btn-start-pause');
   const ctrlPanel = document.getElementById('ctrl-panel');
 
-  btnStart.addEventListener('click', startTimer);
-  btnPause.addEventListener('click', () => {
-    if (!isRunning) { startTimer(); return; }
-    isPaused = !isPaused;
-    if (!isPaused) startTime = Date.now() - elapsed; // compensate pause time
-    btnPause.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
-    btnStart.classList.toggle('hidden', true);
-  });
-
-  function startTimer() {
-    isRunning = true;
-    isPaused = false;
-    startTime = Date.now() - elapsed;
-    btnStart.classList.add('hidden');
-    if (!isRunning) requestAnimationFrame(update); // kick off loop if needed
+  function updateRunningUI() {
+    const active = isRunning && !isPaused;
+    timerEl.classList.toggle('running', active);
+    liveEl.classList.toggle('visible', active);
+    pauseBtn.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
   }
 
+  function start() {
+    if (isRunning) return;
+    isRunning = true; isPaused = false;
+    startTime = performance.now() - elapsed;
+    startBtn.classList.add('hidden');
+    updateRunningUI();
+  }
+
+  startBtn.addEventListener('click', start);
+  pauseBtn.addEventListener('click', () => {
+    if (!isRunning) { start(); return; }
+    isPaused = !isPaused;
+    if (!isPaused) startTime = performance.now() - elapsed;
+    updateRunningUI();
+  });
+
   document.getElementById('btn-reset').addEventListener('click', () => {
-    isRunning = false;
-    isPaused = false;
-    elapsed = 0;
-    lastTriggeredHour = -1;
-    renderTimer();
-    btnStart.classList.remove('hidden');
-    btnPause.textContent = 'Start / Pause';
-    document.getElementById('theme-layer').style.background = ''; // reset to default
-    clearTimeout(messageTimeout);
-    document.getElementById('message-overlay').classList.remove('visible');
+    isRunning = false; isPaused = false; elapsed = 0; lastTriggeredHour = -1;
+    startBtn.classList.remove('hidden'); updateRunningUI();
+    clearTimeout(messageTimeout); document.getElementById('message-overlay').classList.remove('visible');
   });
 
   document.getElementById('btn-minus').addEventListener('click', () => {
     elapsed = Math.max(0, elapsed - 3600000);
     if (elapsed > 0) lastTriggeredHour = Math.floor(elapsed / 3600000);
     else lastTriggeredHour = -1;
-    renderTimer();
-    updateTheme();
+    updateRunningUI();
   });
 
   document.getElementById('btn-plus').addEventListener('click', () => {
     elapsed += 3600000;
     if (isRunning && !isPaused) startTime -= 3600000;
-    renderTimer();
     checkHourTrigger();
-    updateTheme();
   });
 
-  // Settings Toggle
   document.getElementById('ctrl-toggle').addEventListener('click', () => {
     ctrlPanel.classList.toggle('open');
   });
 
-  // Start render loop immediately for background
+  // Kick off
   requestAnimationFrame(update);
 </script>
 </body>
