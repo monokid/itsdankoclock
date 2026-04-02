@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cosmic Hourly Timer</title>
+  <style>
+    :root {
+      --bg-start: hsl(30, 70%, 88%); /* Dawn light */
+      --bg-end: hsl(260, 60%, 6%);   /* Deep space dark */
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+    body, html { width: 100%; height: 100vh; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; }
+    
+    /* Background Canvas */
+    #nebula-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+    
+    /* Dynamic Theme Overlay */
+    #theme-layer {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2;
+      transition: background 3s ease-in-out;
+    }
+
+    /* Center Timer */
+    #timer {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      font-size: clamp(4rem, 22vw, 16rem);
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 0 0 15px rgba(255,255,255,0.9), 0 0 30px rgba(100,150,255,0.6);
+      letter-spacing: -0.02em;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    /* Start Button */
+    #start-btn {
+      position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
+      z-index: 20;
+      padding: 1rem 3rem; font-size: 1.4rem; font-weight: 700;
+      background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.6);
+      color: white; border-radius: 99px; cursor: pointer;
+      backdrop-filter: blur(12px); transition: all 0.3s ease;
+    }
+    #start-btn:hover { background: rgba(255,255,255,0.25); transform: translateX(-50%) scale(1.03); }
+    #start-btn.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) scale(0.9); }
+
+    /* Hourly Message Overlay */
+    #message-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 50;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      background: #ffffff; color: #111;
+      opacity: 0; pointer-events: none; transition: opacity 1.2s ease;
+      text-align: center; padding: 2rem;
+    }
+    #message-overlay.visible { opacity: 1; pointer-events: auto; }
+    #message-text {
+      font-size: clamp(1.8rem, 6vw, 3.5rem); font-weight: 800; line-height: 1.4;
+      margin-bottom: 1rem;
+    }
+    #message-sub {
+      font-size: clamp(1rem, 3vw, 1.5rem); opacity: 0.7; font-weight: 500;
+    }
+
+    /* Hidden Controls */
+    #ctrl-toggle {
+      position: fixed; top: 12px; left: 12px; z-index: 60;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(255,255,255,0.15); border: none;
+      color: rgba(255,255,255,0.5); font-size: 1.2rem; cursor: pointer;
+      backdrop-filter: blur(6px); transition: all 0.3s;
+    }
+    #ctrl-panel {
+      position: fixed; top: 65px; left: 12px; z-index: 55;
+      background: rgba(0,0,0,0.75); padding: 16px; border-radius: 12px;
+      display: flex; flex-direction: column; gap: 10px;
+      backdrop-filter: blur(10px); opacity: 0; pointer-events: none;
+      transform: translateY(-10px); transition: all 0.3s ease;
+    }
+    #ctrl-panel.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
+    #ctrl-panel button {
+      padding: 12px 16px; background: #333; border: 1px solid #555;
+      color: white; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: 500;
+      transition: background 0.2s;
+    }
+    #ctrl-panel button:hover { background: #555; }
+    #ctrl-panel button:active { transform: scale(0.96); }
+  </style>
+</head>
+<body>
+
+  <canvas id="nebula-canvas"></canvas>
+  <div id="theme-layer"></div>
+  <div id="timer">00:00</div>
+  <button id="start-btn">START</button>
+
+  <div id="message-overlay">
+    <div id="message-text"></div>
+    <div id="message-sub">Take a mindful break. You've got this. 💫</div>
+  </div>
+
+  <button id="ctrl-toggle" aria-label="Settings">⚙️</button>
+  <div id="ctrl-panel">
+    <button id="btn-start-pause">Start / Pause</button>
+    <button id="btn-reset">Reset (00:00)</button>
+    <div style="display:flex; gap:8px;">
+      <button id="btn-minus" style="flex:1;">− 1h</button>
+      <button id="btn-plus" style="flex:1;">+ 1h</button>
+    </div>
+  </div>
+
+<script>
+  // --- Canvas Setup ---
+  const canvas = document.getElementById('nebula-canvas');
+  const ctx = canvas.getContext('2d');
+  let w, h, cx, cy;
+  const STAR_COUNT = 750;
+  const stars = [];
+
+  class Star {
+    constructor() { this.reset(true); }
+    reset(init = false) {
+      this.x = (Math.random() - 0.5) * w * 2.5;
+      this.y = (Math.random() - 0.5) * h * 2.5;
+      this.z = init ? Math.random() * 1200 : 1200;
+      this.hue = Math.random() * 360;
+      this.size = Math.random() * 1.5 + 0.5;
+      this.speed = 1.5 + Math.random() * 2.5;
+    }
+    draw(hours) {
+      this.z -= this.speed;
+      if (this.z <= 1) { this.reset(); return; }
+
+      const scale = 300 / this.z;
+      const sx = cx + this.x * scale;
+      const sy = cy + this.y * scale;
+      const r = Math.max(0.5, this.size * scale * 1.2);
+      
+      if (sx < -20 || sx > w + 20 || sy < -20 || sy > h + 20) return;
+
+      // Psychedelic hue shift over time + per-star variation
+      const hue = (this.hue + hours * 40) % 360;
+      const lightness = Math.min(80, 50 + (1 - this.z / 1200) * 50);
+      
+      // Whoosh trail
+      const prevScale = 300 / (this.z + this.speed * 15);
+      const px = cx + this.x * prevScale;
+      const py = cy + this.y * prevScale;
+
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(px, py);
+      ctx.strokeStyle = `hsla(${hue}, 80%, ${lightness}%, 0.8)`;
+      ctx.lineWidth = r;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Core
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${hue}, 90%, 90%, 1)`;
+      ctx.fill();
+    }
+  }
+
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    cx = w / 2; cy = h / 2;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  for(let i=0; i<STAR_COUNT; i++) stars.push(new Star());
+
+  // --- State ---
+  let isRunning = false;
+  let startTime = 0;
+  let elapsed = 0; // ms
+  let lastTriggeredHour = -1;
+  let messageTimeout;
+  let isPaused = false;
+
+  const messages = [
+    "🌿 Time to hydrate! Drink water, stretch your limbs, and breathe deeply.",
+    "🌟 You're doing amazing! Step away for a moment, grab a snack, smile.",
+    "💧 Hydration check! Roll your shoulders, look out a window, reset your mind.",
+    "🍎 Vitamin break! Move around, touch some greenery, nourish yourself.",
+    "🧘‍♀️ Gentle reminder: You are worthy. Take a slow breath, drink water.",
+    "✨ Stand up, shake it out, and acknowledge your progress. Keep going.",
+    "🌈 Hydrate, refresh, reset. Every hour you show up is a victory.",
+    "💖 You matter. Drink some water, step outside if you can, breathe."
+  ];
+
+  // --- Core Loop ---
+  function update() {
+    if (isRunning && !isPaused) {
+      const now = Date.now();
+      elapsed = now - startTime;
+    }
+    renderTimer();
+    checkHourTrigger();
+    updateTheme();
+    drawStars();
+    requestAnimationFrame(update);
+  }
+
+  function renderTimer() {
+    const totalMins = Math.max(0, Math.floor(elapsed / 60000));
+    const hh = String(Math.floor(totalMins / 60)).padStart(2, '0');
+    const mm = String(totalMins % 60).padStart(2, '0');
+    document.getElementById('timer').textContent = `${hh}:${mm}`;
+  }
+
+  function updateTheme() {
+    const hours = elapsed / 3600000;
+    const p = Math.min(1, hours / 8); // 0 to 1 over 8 hours
+    
+    // Interpolate HSL
+    const h = 30 + (230 * p);
+    const s = 65 + (15 * p);
+    const l = 92 - (86 * p);
+    const bgStart = `hsl(${h}, ${s}%, ${l}%)`;
+    const bgEnd = `hsl(${(h + 40) % 360}, ${s - 10}%, ${l - 20}%)`;
+    
+    document.getElementById('theme-layer').style.background = 
+      `radial-gradient(ellipse at center, ${bgStart} 0%, ${bgEnd} 100%)`;
+  }
+
+  function checkHourTrigger() {
+    const currentHour = Math.floor(elapsed / 3600000);
+    if (currentHour > 0 && currentHour !== lastTriggeredHour) {
+      lastTriggeredHour = currentHour;
+      showMessage(currentHour);
+    }
+  }
+
+  function showMessage(hour) {
+    const overlay = document.getElementById('message-overlay');
+    const textEl = document.getElementById('message-text');
+    textEl.textContent = messages[hour % messages.length];
+    overlay.classList.add('visible');
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+    if (messageTimeout) clearTimeout(messageTimeout);
+    messageTimeout = setTimeout(() => {
+      overlay.classList.remove('visible');
+    }, 3 * 60 * 1000); // 3 minutes
+  }
+
+  function drawStars() {
+    ctx.clearRect(0, 0, w, h);
+    const hours = elapsed / 3600000;
+    for (let star of stars) star.draw(hours);
+  }
+
+  // --- Controls ---
+  const btnStart = document.getElementById('start-btn');
+  const btnPause = document.getElementById('btn-start-pause');
+  const ctrlPanel = document.getElementById('ctrl-panel');
+
+  btnStart.addEventListener('click', startTimer);
+  btnPause.addEventListener('click', () => {
+    if (!isRunning) { startTimer(); return; }
+    isPaused = !isPaused;
+    if (!isPaused) startTime = Date.now() - elapsed; // compensate pause time
+    btnPause.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+    btnStart.classList.toggle('hidden', true);
+  });
+
+  function startTimer() {
+    isRunning = true;
+    isPaused = false;
+    startTime = Date.now() - elapsed;
+    btnStart.classList.add('hidden');
+    if (!isRunning) requestAnimationFrame(update); // kick off loop if needed
+  }
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    isRunning = false;
+    isPaused = false;
+    elapsed = 0;
+    lastTriggeredHour = -1;
+    renderTimer();
+    btnStart.classList.remove('hidden');
+    btnPause.textContent = 'Start / Pause';
+    document.getElementById('theme-layer').style.background = ''; // reset to default
+    clearTimeout(messageTimeout);
+    document.getElementById('message-overlay').classList.remove('visible');
+  });
+
+  document.getElementById('btn-minus').addEventListener('click', () => {
+    elapsed = Math.max(0, elapsed - 3600000);
+    if (elapsed > 0) lastTriggeredHour = Math.floor(elapsed / 3600000);
+    else lastTriggeredHour = -1;
+    renderTimer();
+    updateTheme();
+  });
+
+  document.getElementById('btn-plus').addEventListener('click', () => {
+    elapsed += 3600000;
+    if (isRunning && !isPaused) startTime -= 3600000;
+    renderTimer();
+    checkHourTrigger();
+    updateTheme();
+  });
+
+  // Settings Toggle
+  document.getElementById('ctrl-toggle').addEventListener('click', () => {
+    ctrlPanel.classList.toggle('open');
+  });
+
+  // Start render loop immediately for background
+  requestAnimationFrame(update);
+</script>
+</body>
+</html>
